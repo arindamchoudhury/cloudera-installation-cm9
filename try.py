@@ -352,8 +352,8 @@ hive_config = {
     'hive_metastore_database_password': 'suTOXS7HzV',
     'hive_metastore_database_port': 7432,
     'hive_metastore_database_type': 'postgresql',
-    'mapreduce_yarn_service': yarn_service,
-    'zookeeper_service': zookeeper_service
+    'mapreduce_yarn_service': yarn_servicename,
+    'zookeeper_service': zookeeper_servicename
     }
 hiveserver2_config = {
     'hiveserver2_java_heapsize':'52428800'
