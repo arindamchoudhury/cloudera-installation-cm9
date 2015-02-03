@@ -412,7 +412,7 @@ cluster.start().wait()
 
 print "Deploying OOZIE"
 
-oozie_service = cluster.create_service(hive_servicename, "OOZIE")
+oozie_service = cluster.create_service(oozie_servicename, "OOZIE")
 oozie_service.create_role(oozie_server_servicename,"OOZIE_SERVER",oozie_server_hostref)
 
 print "configuring OOZIE"
@@ -428,7 +428,7 @@ oozie_server_config = {
     }
 
 oozieserver_groups = []
-for group in hive_service.get_all_role_config_groups():
+for group in oozie_service.get_all_role_config_groups():
     if group.roleType == 'OOZIE_SERVER':
         oozieserver_groups.append(group)
 
