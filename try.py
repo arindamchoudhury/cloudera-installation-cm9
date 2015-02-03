@@ -7,7 +7,7 @@ from cm_api.endpoints.services import ApiService
 from cm_api.endpoints.services import ApiServiceSetupInfo
 
 config = ConfigParser.ConfigParser()
-config.read("clouderaconfig.ini")
+config.read("/root/python-script/clouderaconfig.ini")
 
 cm_api_host = config.get("CM", "cm.api.host")
 cm_api_version = config.get("CM", "cm.api.version")
@@ -60,6 +60,14 @@ hive_hiveserver2_servicename = config.get("HIVE", "hive.hiveserver2.servicename"
 hive_gateway = config.get("HIVE", "hive.gateway")
 hive_metastore = config.get("HIVE", "hive.metastore")
 hive_hiveserver2 = config.get("HIVE", "hive.hiveserver2")
+
+oozie_servicename = config.get("OOZIE", "oozie.servicename")
+oozie_server_servicename = config.get("OOZIE", "oozie.server.servicename")
+oozie_server = config.get("OOZIE", "oozie.server")
+ 
+hue_servicename = config.get("HUE", "hue.servicename")
+hue_server_servicename = config.get("HUE", "hue.server.servicename")
+hue_server = config.get("HUE", "hue.server")
 
 with open(private_key_file,'r') as f:
     private_key_contents = f.read()
@@ -115,6 +123,10 @@ for host in all_hosts:
         hive_metastore_hostref = host.hostId
     if host.hostname == hive_hiveserver2:
         hive_hiveserver2_hostref = host.hostId
+    if host.hostname == oozie_server:
+        oozie_server_hostref = host.hostId
+    if host.hostname == hue_server:
+        hue_server_hostref = host.hostId
     hostrefs.append(host.hostId)
 
 cluster.add_hosts(hostrefs)
@@ -398,4 +410,83 @@ print "Restarting cluster"
 cluster.stop().wait()
 cluster.start().wait()
 
+print "Deploying OOZIE"
+
+oozie_service = cluster.create_service(hive_servicename, "OOZIE")
+oozie_service.create_role(oozie_server_servicename,"OOZIE_SERVER",oozie_server_hostref)
+
+print "configuring OOZIE"
+
+oozie_config = {
+    'hive_service':hive_servicename,
+    'mapreduce_yarn_service':yarn_servicename,
+    'zookeeper_service':zookeeper_servicename
+    }
+oozie_server_config = {
+    'oozie_java_heapsize':'52428800',
+    'oozie_data_dir':'/var/lib/oozie/data'
+    }
+
+oozieserver_groups = []
+for group in hive_service.get_all_role_config_groups():
+    if group.roleType == 'OOZIE_SERVER':
+        oozieserver_groups.append(group)
+
+oozie_service.update_config(oozie_config)
+
+for group in oozieserver_groups:
+    group.update_config(oozie_server_config)
+
+print "Initiating First Run command after OOZIE"
+
+cmd = cluster.first_run()
+
+while cmd.active == True:
+    sleep(5)
+    print " ..."
+    cmd = cmd.fetch()
+    
+if cmd.success != True:
+    print "First run failed after OOZIE: " + cmd.resultMessage
+    exit(0)
+print "First run successful after OOZIE: " + cmd.resultMessage
+
+print "Restarting cluster"
+cluster.stop().wait()
+cluster.start().wait()   
+
+print "Deploying HUE"
+
+hue_service = cluster.create_service(hue_servicename, "HUE")
+hue_service.create_role(hue_server_servicename,"HUE_SERVER",hue_server_hostref)
+
+print "configuring HUE"
+
+hue_config = {
+    'hive_service':hive_servicename,
+    'mapreduce_yarn_service':yarn_servicename,
+    'zookeeper_service':zookeeper_servicename,
+    'oozie_service':oozie_servicename,
+    'hue_webhdfs':'namenode-1'
+    }
+
+hue_service.update_config(hue_config)
+
+print "Initiating First Run command after HUE"
+
+cmd = cluster.first_run()
+
+while cmd.active == True:
+    sleep(5)
+    print " ..."
+    cmd = cmd.fetch()
+    
+if cmd.success != True:
+    print "First run failed after HUE: " + cmd.resultMessage
+    exit(0)
+print "First run successful after HUE: " + cmd.resultMessage
+
+print "Restarting cluster"
+cluster.stop().wait()
+cluster.start().wait()
 print "Cloudera CDH installation in done"
