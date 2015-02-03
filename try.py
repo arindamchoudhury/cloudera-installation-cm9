@@ -17,7 +17,7 @@ cm_api_pass = config.get("CM", "admin.api.password")
 cm_management_host = config.get("MANAGEMENT", "mgmt.host")
 
 host_username = config.get("HOST", "host.username")
-host_password = config.get("HOST", "host.password")
+private_key_file = config.get("HOST", "host.privatekey")
 
 cluster_name = config.get("CDH", "cluster.name")
 cluster_hosts = config.get("CDH", "cluster.hosts").split(',')
@@ -61,11 +61,14 @@ hive_gateway = config.get("HIVE", "hive.gateway")
 hive_metastore = config.get("HIVE", "hive.metastore")
 hive_hiveserver2 = config.get("HIVE", "hive.hiveserver2")
 
+with open(private_key_file,'r') as f:
+    private_key_contents = f.read()
+
 api = ApiResource(cm_api_host, version=cm_api_version, username=cm_api_user, password=cm_api_pass)
 
 manager = api.get_cloudera_manager()
 
-cmd = manager.host_install(host_username,cluster_hosts, password=host_password)
+cmd = manager.host_install(host_username,cluster_hosts, private_key=private_key_contents)
 print "checking if host_install finished"    
 while cmd.active == True:
     sleep(5)
