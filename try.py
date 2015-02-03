@@ -3,8 +3,17 @@ import socket
 import sys
 from time import sleep
 from cm_api.api_client import ApiResource
-from cm_api.endpoints.services import ApiService
-from cm_api.endpoints.services import ApiServiceSetupInfo
+from cm_api.endpoints.clusters import ApiCluster
+from cm_api.endpoints.clusters import create_cluster
+from cm_api.endpoints.parcels import ApiParcel
+from cm_api.endpoints.parcels import get_parcel
+from cm_api.endpoints.cms import ClouderaManager
+from cm_api.endpoints.services import ApiService, ApiServiceSetupInfo
+from cm_api.endpoints.services import create_service
+from cm_api.endpoints.types import ApiCommand, ApiRoleConfigGroupRef
+from cm_api.endpoints.role_config_groups import get_role_config_group
+from cm_api.endpoints.role_config_groups import ApiRoleConfigGroup
+from cm_api.endpoints.roles import ApiRole
 
 config = ConfigParser.ConfigParser()
 config.read("/root/python-script/clouderaconfig.ini")
@@ -22,7 +31,7 @@ private_key_file = config.get("HOST", "host.privatekey")
 cluster_name = config.get("CDH", "cluster.name")
 cluster_hosts = config.get("CDH", "cluster.hosts").split(',')
 cdh_version = config.get("CDH", "cdh.version")
-parcel_version = config.get("CDH", "parcel.version")
+cdh_version_number = config.get("CDH", "parcel.version")
 
 management_service_name = config.get("MANAGEMENT", "service.name")
 smon_role_name = config.get("MANAGEMENT", "servicemonitor.name")
@@ -132,35 +141,62 @@ for host in all_hosts:
 cluster.add_hosts(hostrefs)
 
 
-parcel = cluster.get_parcel('CDH', parcel_version)
+parcels_list = []
+# get and list all available parcels
+print "Available parcels:"
+for p in cluster.get_all_parcels():
+    print '\t' + p.product + ' ' + p.version
+    if p.version.startswith(cdh_version_number) and p.product == "CDH":
+        parcels_list.append(p)
+        
+if len(parcels_list) == 0:
+    print "No " + cdh_version + " parcel found!"
+    exit(0)
+    
+cdh_parcel = parcels_list[0]
+for p in parcels_list:
+    if p.version > cdh_parcel.version:
+        cdh_parcel = p
 
-parcel.start_download()
+print cdh_parcel
 
-while True:
-    parcel = cluster.get_parcel('CDH', parcel_version)
-    if parcel.stage == 'DOWNLOADED':
-        break
-    if parcel.state.errors:
-        raise Exception(str(parcel.state.errors))
-    print "progress: %s / %s" % (parcel.state.progress, parcel.state.totalProgress)
+cmd = cdh_parcel.start_download()
+
+if cmd.success != True:
+    print "Parcel download failed!"
+    exit(0)
+
+while cdh_parcel.stage != 'DOWNLOADED':
     sleep(5)
+    cdh_parcel = get_parcel(api, cdh_parcel.product, cdh_parcel.version, cluster_name)
+    
+print cdh_parcel.product + ' ' + cdh_parcel.version + " downloaded"
 
-print "downloaded CDH parcel version %s on cluster %s" % (parcel_version, cluster_name)
+# distribute the parcel
+print "Starting parcel distribution. This might take a while."
+cmd = cdh_parcel.start_distribution()
+if cmd.success != True:
+    print "Parcel distribution failed!"
+    exit(0)
 
-parcel.start_distribution()
+# make sure the distribution finishes
+while cdh_parcel.stage != "DISTRIBUTED":
+    sleep(5)
+    cdh_parcel = get_parcel(api, cdh_parcel.product, cdh_parcel.version, cluster_name)
+print cdh_parcel.product + ' ' + cdh_parcel.version + " distributed"
 
-while True:
-  parcel = cluster.get_parcel('CDH', parcel_version)
-  if parcel.stage == 'DISTRIBUTED':
-    break
-  if parcel.state.errors:
-    raise Exception(str(parcel.state.errors))
-  print "progress: %s / %s" % (parcel.state.progress, parcel.state.totalProgress)
-  sleep(5)
+# activate the parcel
+cmd = cdh_parcel.activate()
+if cmd.success != True:
+    print "Parcel activation failed!"
+    exit(0)
 
-print "distributed CDH parcel version %s on cluster %s" % (parcel_version, cluster_name)
+# make sure the activation finishes
+while cdh_parcel.stage != "ACTIVATED":
+    cdh_parcel = get_parcel(api, cdh_parcel.product, cdh_parcel.version, cluster_name)
+print cdh_parcel.product + ' ' + cdh_parcel.version + " activated"
 
-parcel.activate()
+
 
 mgmt = manager.create_mgmt_service(ApiServiceSetupInfo(name = management_service_name, type = "MGMT"))
 
