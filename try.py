@@ -530,7 +530,6 @@ print "configuring HUE"
 
 hue_config = {
     'hive_service':hive_servicename,
-    'mapreduce_yarn_service':yarn_servicename,
     'zookeeper_service':zookeeper_servicename,
     'oozie_service':oozie_servicename,
     'hue_webhdfs':'namenode-1'
